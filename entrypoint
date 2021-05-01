@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -e
+
+child=""
+
+_term() { 
+  if ! pidof envoy &>/dev/null; then
+    exit 0
+  fi
+
+  if ! pidof pilot-agent &>/dev/null; then
+    exit 0
+  fi
+
+  while [ $(netstat -plunt | grep tcp | grep -v envoy | grep -v pilot | wc -l | xargs) != "0" ]; do
+    sleep 1;
+  done
+
+  kill -TERM "$child" 2>/dev/null
+}
+
+trap _term SIGTERM
+
+/usr/local/bin/pilot-agent "$@" &
+child=$!
+
+wait $child
+
+exit $?

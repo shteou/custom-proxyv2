@@ -2,29 +2,35 @@
 
 set -e
 
-child=""
-
+# SIGTERM handler
 _term() { 
+  # Exit early if envoy isn't running
   if ! pidof envoy &>/dev/null; then
     exit 0
   fi
 
+  # Exit early if istio's pilot agent isn't running
   if ! pidof pilot-agent &>/dev/null; then
     exit 0
   fi
 
-  while [ $(netstat -plunt | grep tcp | grep -v envoy | grep -v pilot | wc -l | xargs) != "0" ]; do
+  # Wait for non-sidecar sockets to be closed before progressing
+  # The proxy sidecar runs pilot-agent and envoy, excluded these so we only wait for
+  # application sockets
+  while [ $(netstat -plunt | grep tcp | grep -v envoy | grep -v "pilot-agent" | wc -l | xargs) != "0" ]; do
     sleep 1;
   done
 
+  # Kill the pilot-agent
   kill -TERM "$child" 2>/dev/null
 }
 
 trap _term SIGTERM
 
+# Run pilot-agent, the original entrypoint, with all supplied args
 /usr/local/bin/pilot-agent "$@" &
 child=$!
 
+# Wait for the child to exit and proxy its exit code
 wait $child
-
 exit $?
